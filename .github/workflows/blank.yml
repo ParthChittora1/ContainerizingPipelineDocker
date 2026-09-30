@@ -1,0 +1,35 @@
+name: Reuse Shared Docker Image
+ 
+on:
+  workflow_dispatch:
+ 
+jobs:
+  test-reusable-image:
+    runs-on: ubuntu-latest
+ 
+    container:
+      image: ghcr.io/deep2131/reusable-pipeline-poc:1.0
+ 
+    defaults:
+      run:
+        shell: bash
+ 
+    steps:
+ 
+      - name: Verify Reusable Environment
+        run: |
+          echo "Testing image"
+ 
+          echo "curl:"
+          curl --version | head -1
+ 
+          echo "jq:"
+          jq --version
+ 
+          echo "Python:"
+          python3 --version
+ 
+          echo "Git:"
+          git --version
+ 
+          echo "POC SUCCESSFUL"

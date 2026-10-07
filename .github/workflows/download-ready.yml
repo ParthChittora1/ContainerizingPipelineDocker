@@ -59,7 +59,7 @@ jobs:
  
           echo ""
           echo "unzip:"
-          unzip -v | head -1
+          unzip -v 
  
           echo ""
           echo "Reusable SAP script:"

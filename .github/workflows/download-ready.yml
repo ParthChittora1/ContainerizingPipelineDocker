@@ -1,278 +1,92 @@
 name: Download ReadyForDeployment CPI Artifacts
- 
+
 on:
   workflow_dispatch:
- 
+
 permissions:
   contents: read
   packages: read
- 
+
 jobs:
   download-ready-artifacts:
- 
+
     runs-on: ubuntu-latest
- 
-    # Generic reusable image created in Account 1
+
     container:
       image: ghcr.io/deep2131/sap-cicd-runtime:1.0
- 
+
     defaults:
       run:
         shell: bash
- 
+
     env:
       SAP_BASE_URL: ${{ secrets.SAP_BASE_URL }}
       SAP_TOKEN_URL: ${{ secrets.SAP_TOKEN_URL }}
       SAP_CLIENT_ID: ${{ secrets.SAP_CLIENT_ID }}
       SAP_CLIENT_SECRET: ${{ secrets.SAP_CLIENT_SECRET }}
- 
+
     steps:
- 
-      # ---------------------------------------------------
-      # 1. Checkout Account 2 repository
-      # ---------------------------------------------------
+
       - name: Checkout Repository
         uses: actions/checkout@v5
- 
- 
-      # ---------------------------------------------------
-      # 2. Show workspace and runtime information
-      # ---------------------------------------------------
-      - name: Verify Runtime Environment
+
+      - name: Verify Configuration
         run: |
           echo "======================================"
-          echo "Reusable SAP CI/CD Runtime"
+          echo "Configuration Check"
           echo "======================================"
- 
-          echo "GitHub workspace:"
-          echo "$GITHUB_WORKSPACE"
- 
+
+          echo "BASE URL:"
+          echo "$SAP_BASE_URL"
+
           echo ""
-          echo "Runtime tools:"
- 
-          echo "curl:"
-          curl --version 
- 
-          echo ""
-          echo "jq:"
-          jq --version
- 
-          echo ""
-          echo "unzip:"
-          unzip -v 
- 
-          echo ""
-          echo "Reusable SAP script:"
-          which download-ready-iflows.sh
- 
-          echo ""
-          echo "Runtime verification successful."
- 
- 
-      # ---------------------------------------------------
-      # 3. Validate required CPI secrets
-      # ---------------------------------------------------
-      - name: Validate CPI Configuration
+          echo "TOKEN URL:"
+          echo "$SAP_TOKEN_URL"
+
+      - name: Generate OAuth Token
         run: |
-          echo "======================================"
-          echo "Validating CPI configuration"
-          echo "======================================"
- 
-          missing=0
- 
-          for var in \
-            SAP_BASE_URL \
-            SAP_TOKEN_URL \
-            SAP_CLIENT_ID \
-            SAP_CLIENT_SECRET
-          do
- 
-            if [ -z "${!var:-}" ]; then
-              echo "::error::$var is not configured."
-              missing=1
-            else
-              echo "$var is configured."
-            fi
- 
-          done
- 
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::Required CPI configuration is missing."
+
+          TOKEN_RESPONSE=$(curl -s \
+            -X POST "$SAP_TOKEN_URL" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials" \
+            -d "client_id=$SAP_CLIENT_ID" \
+            -d "client_secret=$SAP_CLIENT_SECRET")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" = "null" ]; then
+            echo "OAuth failed"
+            echo "$TOKEN_RESPONSE"
             exit 1
           fi
- 
-          echo ""
-          echo "CPI configuration validation passed."
- 
- 
-      # ---------------------------------------------------
-      # 4. Run reusable downloader from Docker image
-      #
-      # Script performs:
-      #
-      # CPI authentication
-      #       ↓
-      # Get IntegrationDesigntimeArtifacts
-      #       ↓
-      # Find Version ending:
-      # .ReadyForDeployment
-      #       ↓
-      # Download matching iFlows
-      # ---------------------------------------------------
-      - name: Download ReadyForDeployment Artifacts
+
+          echo "OAuth token generated successfully."
+
+          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> $GITHUB_ENV
+
+      - name: Test CPI Design Time API
         run: |
+
           echo "======================================"
-          echo "Searching CPI artifacts"
+          echo "Testing CPI API"
           echo "======================================"
- 
-          download-ready-iflows.sh
- 
- 
-      # ---------------------------------------------------
-      # 5. Show complete GitHub workspace
-      # ---------------------------------------------------
-      - name: Show GitHub Workspace
-        if: ${{ !cancelled() }}
+
+          API_URL="$SAP_BASE_URL/api/v1/IntegrationDesigntimeArtifacts"
+
+          echo "Calling:"
+          echo "$API_URL"
+
+          echo ""
+          echo "Response headers:"
+
+          curl -v \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Accept: application/json" \
+            "$API_URL"
+
+      - name: Show Workspace
+        if: always()
         run: |
-          echo "======================================"
-          echo "GitHub Workspace"
-          echo "======================================"
- 
-          echo "Workspace location:"
-          echo "$GITHUB_WORKSPACE"
- 
-          echo ""
-          echo "Workspace contents:"
- 
-          ls -lah "$GITHUB_WORKSPACE"
- 
-          echo ""
-          echo "Directory structure:"
- 
-          find "$GITHUB_WORKSPACE" \
-            -maxdepth 2 \
-            -type f \
-            -print
- 
- 
-      # ---------------------------------------------------
-      # 6. Verify artifact directory and ZIP files
-      # ---------------------------------------------------
-      - name: Verify Downloaded Artifacts
-        run: |
-          echo "======================================"
-          echo "Download Verification"
-          echo "======================================"
- 
-          ARTIFACT_DIR="$GITHUB_WORKSPACE/artifacts"
- 
-          echo "Expected artifact directory:"
-          echo "$ARTIFACT_DIR"
- 
-          echo ""
- 
-          if [ ! -d "$ARTIFACT_DIR" ]; then
-            echo "::error::Artifact directory was not created."
-            exit 1
-          fi
- 
-          echo "Artifact directory exists."
- 
-          echo ""
-          echo "Downloaded files:"
- 
-          ls -lah "$ARTIFACT_DIR"
- 
-          ZIP_COUNT=$(find "$ARTIFACT_DIR" \
-            -maxdepth 1 \
-            -type f \
-            -name "*.zip" \
-            | wc -l)
- 
-          echo ""
-          echo "ZIP files downloaded: $ZIP_COUNT"
- 
-          if [ "$ZIP_COUNT" -eq 0 ]; then
-            echo "::error::No ReadyForDeployment ZIP files were downloaded."
-            exit 1
-          fi
- 
-          echo ""
-          echo "Downloaded artifacts:"
- 
-          find "$ARTIFACT_DIR" \
-            -maxdepth 1 \
-            -type f \
-            -name "*.zip" \
-            -print
- 
-          echo ""
-          echo "Download verification successful."
- 
- 
-      # ---------------------------------------------------
-      # 7. Validate downloaded ZIP files
-      # ---------------------------------------------------
-      - name: Validate Downloaded ZIP Files
-        run: |
-          echo "======================================"
-          echo "Validating CPI Artifact ZIPs"
-          echo "======================================"
- 
-          for file in "$GITHUB_WORKSPACE"/artifacts/*.zip
-          do
- 
-            echo ""
-            echo "Checking:"
-            echo "$file"
- 
-            unzip -t "$file" >/dev/null
- 
-            echo "Valid ZIP: $(basename "$file")"
- 
-          done
- 
-          echo ""
-          echo "All downloaded artifacts are valid ZIP files."
- 
- 
-      # ---------------------------------------------------
-      # 8. Upload ZIPs as GitHub Actions artifact
-      # ---------------------------------------------------
-      - name: Upload Downloaded CPI Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ReadyForDeployment-CPI-Artifacts
-          path: artifacts/*.zip
-          if-no-files-found: error
- 
- 
-      # ---------------------------------------------------
-      # 9. Final summary
-      # ---------------------------------------------------
-      - name: POC Summary
-        if: ${{ !cancelled() }}
-        run: |
-          echo "======================================"
-          echo "SAP CI/CD Container POC"
-          echo "======================================"
- 
-          echo ""
-          echo "Generic runtime image : SUCCESS"
-          echo "CPI authentication    : SUCCESS"
-          echo "Ready tag detection   : SUCCESS"
-          echo "Artifact download      : SUCCESS"
-          echo "ZIP validation         : SUCCESS"
-          echo ""
- 
-          echo "ReadyForDeployment artifacts:"
-          find "$GITHUB_WORKSPACE/artifacts" \
-            -maxdepth 1 \
-            -type f \
-            -name "*.zip" \
-            -printf "%f\n"
- 
-          echo ""
-          echo "======================================"
-          echo "POC SUCCESSFUL"
-          echo "======================================"
+          pwd
+          ls -lah

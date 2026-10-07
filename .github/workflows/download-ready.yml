@@ -51,7 +51,7 @@ jobs:
           echo "Runtime tools:"
  
           echo "curl:"
-          curl --version | head -1
+          curl --version 
  
           echo ""
           echo "jq:"

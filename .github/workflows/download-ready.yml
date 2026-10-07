@@ -1,60 +1,144 @@
-# ---------------------------------------------------
-# Debug CPI API Response
-# ---------------------------------------------------
-- name: Debug CPI API
-  run: |
-    echo "======================================"
-    echo "CPI API Debug"
-    echo "======================================"
+name: Debug CPI API
 
-    echo ""
-    echo "Base URL:"
-    echo "$SAP_BASE_URL"
+on:
+  workflow_dispatch:
 
-    echo ""
-    echo "Generating OAuth token..."
+permissions:
+  contents: read
+  packages: read
 
-    TOKEN_RESPONSE=$(curl \
-      --silent \
-      --show-error \
-      --request POST \
-      "$SAP_TOKEN_URL" \
-      --user "$SAP_CLIENT_ID:$SAP_CLIENT_SECRET" \
-      --header "Content-Type: application/x-www-form-urlencoded" \
-      --data "grant_type=client_credentials")
+jobs:
+  debug-cpi:
 
-    echo ""
-    echo "Token Response:"
-    echo "$TOKEN_RESPONSE"
+    runs-on: ubuntu-latest
 
-    ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+    container:
+      image: ghcr.io/deep2131/sap-cicd-runtime:1.0
 
-    if [ -z "$ACCESS_TOKEN" ]; then
-      echo "ERROR: Access token not generated"
-      exit 1
-    fi
+    defaults:
+      run:
+        shell: bash
 
-    echo ""
-    echo "Access token generated successfully"
+    env:
+      SAP_BASE_URL: ${{ secrets.SAP_BASE_URL }}
+      SAP_TOKEN_URL: ${{ secrets.SAP_TOKEN_URL }}
+      SAP_CLIENT_ID: ${{ secrets.SAP_CLIENT_ID }}
+      SAP_CLIENT_SECRET: ${{ secrets.SAP_CLIENT_SECRET }}
 
-    echo ""
-    echo "======================================"
-    echo "CALLING CPI API"
-    echo "======================================"
+    steps:
 
-    API_URL="${SAP_BASE_URL}/api/v1/IntegrationDesigntimeArtifacts"
+      - name: Checkout Repository
+        uses: actions/checkout@v5
 
-    echo "URL:"
-    echo "$API_URL"
+      - name: Verify Runtime
+        run: |
+          echo "=================================="
+          echo "RUNTIME INFORMATION"
+          echo "=================================="
 
-    echo ""
-    echo "Response:"
-    echo "--------------------------------------"
+          echo "Workspace:"
+          echo "$GITHUB_WORKSPACE"
 
-    curl -v \
-      --header "Authorization: Bearer ${ACCESS_TOKEN}" \
-      --header "Accept: application/json" \
-      "$API_URL"
+          echo ""
+          echo "curl version:"
+          curl --version
 
-    echo ""
-    echo "--------------------------------------"
+          echo ""
+          echo "jq version:"
+          jq --version
+
+      - name: Validate Configuration
+        run: |
+          echo "=================================="
+          echo "VALIDATING CONFIGURATION"
+          echo "=================================="
+
+          for var in \
+            SAP_BASE_URL \
+            SAP_TOKEN_URL \
+            SAP_CLIENT_ID \
+            SAP_CLIENT_SECRET
+          do
+
+            if [ -z "${!var:-}" ]; then
+              echo "::error::$var is missing"
+              exit 1
+            fi
+
+            echo "$var is configured"
+
+          done
+
+      - name: Generate OAuth Token
+        run: |
+          echo "=================================="
+          echo "OAUTH TOKEN TEST"
+          echo "=================================="
+
+          TOKEN_RESPONSE=$(curl \
+            --silent \
+            --show-error \
+            --request POST \
+            "$SAP_TOKEN_URL" \
+            --user "$SAP_CLIENT_ID:$SAP_CLIENT_SECRET" \
+            --header "Content-Type: application/x-www-form-urlencoded" \
+            --data "grant_type=client_credentials")
+
+          echo "$TOKEN_RESPONSE" | jq .
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "::error::Access token not returned"
+            exit 1
+          fi
+
+          echo ""
+          echo "Token successfully generated"
+
+      - name: Test CPI API
+        run: |
+          echo "=================================="
+          echo "CPI API TEST"
+          echo "=================================="
+
+          TOKEN_RESPONSE=$(curl \
+            --silent \
+            --show-error \
+            --request POST \
+            "$SAP_TOKEN_URL" \
+            --user "$SAP_CLIENT_ID:$SAP_CLIENT_SECRET" \
+            --header "Content-Type: application/x-www-form-urlencoded" \
+            --data "grant_type=client_credentials")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          API_URL="${SAP_BASE_URL}/api/v1/IntegrationDesigntimeArtifacts"
+
+          echo ""
+          echo "Base URL:"
+          echo "$SAP_BASE_URL"
+
+          echo ""
+          echo "API URL:"
+          echo "$API_URL"
+
+          echo ""
+          echo "Calling CPI API..."
+
+          curl -v \
+            --header "Authorization: Bearer ${ACCESS_TOKEN}" \
+            --header "Accept: application/json" \
+            "$API_URL" \
+            > response.txt 2>&1 || true
+
+          echo ""
+          echo "================ RESPONSE ================"
+          cat response.txt
+          echo "=========================================="
+
+      - name: Upload Debug Output
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPI-Debug-Output
+          path: response.txt

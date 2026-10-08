@@ -100,3 +100,26 @@ jobs:
                 --header "Authorization: Bearer $ACCESS_TOKEN" \
                 "${SAP_BASE_URL}/api/v1/IntegrationRuntimeArtifacts?\$format=json" \
                 | jq .
+      - name: Test Runtime Download
+        run: |
+          TOKEN_RESPONSE=$(curl \
+            --silent \
+            --request POST \
+            "$SAP_TOKEN_URL" \
+            --user "$SAP_CLIENT_ID:$SAP_CLIENT_SECRET" \
+            --header "Content-Type: application/x-www-form-urlencoded" \
+            --data "grant_type=client_credentials")
+      
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+      
+          curl -v \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --output test.zip \
+            "${SAP_BASE_URL}/api/v1/IntegrationRuntimeArtifacts('Test_IFlow')/\$value"
+      
+          echo ""
+          echo "File details:"
+          ls -lah
+      
+          echo ""
+          file test.zip || true

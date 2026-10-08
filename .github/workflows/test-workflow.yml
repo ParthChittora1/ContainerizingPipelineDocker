@@ -1,0 +1,85 @@
+name: CPI API Discovery
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  discover-cpi-apis:
+
+    runs-on: ubuntu-latest
+
+    container:
+      image: ghcr.io/deep2131/sap-cicd-runtime:1.0
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      SAP_BASE_URL: ${{ secrets.SAP_BASE_URL }}
+      SAP_TOKEN_URL: ${{ secrets.SAP_TOKEN_URL }}
+      SAP_CLIENT_ID: ${{ secrets.SAP_CLIENT_ID }}
+      SAP_CLIENT_SECRET: ${{ secrets.SAP_CLIENT_SECRET }}
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Generate OAuth Token
+        run: |
+          echo "================================"
+          echo "GENERATING TOKEN"
+          echo "================================"
+
+          TOKEN_RESPONSE=$(curl \
+            --silent \
+            --show-error \
+            --request POST \
+            "$SAP_TOKEN_URL" \
+            --user "$SAP_CLIENT_ID:$SAP_CLIENT_SECRET" \
+            --header "Content-Type: application/x-www-form-urlencoded" \
+            --data "grant_type=client_credentials")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "Failed to generate token"
+            exit 1
+          fi
+
+          echo "ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
+
+          echo "Token generated successfully"
+
+      - name: Discover Available APIs
+        run: |
+          APIS=(
+            "/api/v1"
+            "/api/v1/IntegrationDesigntimeArtifacts"
+            "/api/v1/IntegrationRuntimeArtifacts"
+            "/api/v1/MessageProcessingLogs"
+          )
+
+          for api in "${APIS[@]}"
+          do
+            echo ""
+            echo "========================================"
+            echo "Testing API: $api"
+            echo "========================================"
+
+            curl \
+              --silent \
+              --location \
+              --write-out "\nHTTP_CODE:%{http_code}\n" \
+              --header "Authorization: Bearer $ACCESS_TOKEN" \
+              --header "Accept: application/json" \
+              "$SAP_BASE_URL$api"
+
+            echo ""
+            echo ""
+          done

@@ -14,7 +14,7 @@ jobs:
  
     # Generic reusable image created in Account 1
     container:
-      image:  ghcr.io/deep2131/sap-cicd-runtime:1.3
+      image:  ghcr.io/deep2131/sap-cicd-runtime:1.4
  
     defaults:
       run:

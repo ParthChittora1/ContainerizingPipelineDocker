@@ -14,14 +14,14 @@ jobs:
  
     # Generic reusable image created in Account 1
     container:
-      image:  ghcr.io/deep2131/sap-cicd-runtime:1.1
+      image:  ghcr.io/deep2131/sap-cicd-runtime:1.2
  
     defaults:
       run:
         shell: bash
  
     env:
-      SAP_BASE_URL: ${{ secrets.SAP_BASE_URL }}
+      # SAP_BASE_URL: ${{ secrets.SAP_BASE_URL }}
       SAP_TOKEN_URL: ${{ secrets.SAP_TOKEN_URL }}
       SAP_CLIENT_ID: ${{ secrets.SAP_CLIENT_ID }}
       SAP_CLIENT_SECRET: ${{ secrets.SAP_CLIENT_SECRET }}
